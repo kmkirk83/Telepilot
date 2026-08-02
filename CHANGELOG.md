@@ -18,6 +18,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - `.env.example` covering all required and optional environment variables.
 - `action.yml` — reusable GitHub Action definition with inputs, outputs, and branding.
 - `.github/workflows/ci.yml` — CI pipeline (lint, test, build) with release automation.
+- `.github/FUNDING.yml` — GitHub Sponsors and Open Collective funding links.
+- `MONETIZATION.md` — free-first monetization strategy covering GitHub Sponsors, consulting, hosted tier roadmap, B2B angle, adjacent products, and legal/ToS checklist.
+- `docs/pricing.md` — feature tier breakdown for free self-hosted, sponsored, consulting, and future hosted/enterprise tiers.
+- `docs/architecture.md` — component diagram, data-flow, and API endpoint reference.
+- Sponsorship & Support section in `README.md`.
 - Marketplace publication checklist in `README.md`.
 
 ---

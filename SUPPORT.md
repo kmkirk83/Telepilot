@@ -8,6 +8,8 @@ Thank you for using Telepilot!
 |---|---|
 | [GitHub Issues](../../issues) | Bug reports, confirmed defects |
 | [GitHub Discussions](../../discussions) | Questions, ideas, show-and-tell |
+| [GitHub Sponsors](https://github.com/sponsors/kmkirk83) | Sponsorships and one-time consulting payments |
+| [Open Collective](https://opencollective.com/telepilot) | Transparent community funding |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Guidance on opening pull requests |
 | [SECURITY.md](SECURITY.md) | Reporting security vulnerabilities |
 
@@ -34,6 +36,10 @@ This is a community-maintained open-source project. Response times are best-effo
 | Security vulnerability | ≤ 72 hours (private channel) |
 | Critical bug (data loss / crash) | ≤ 7 days |
 | Standard bug / feature request | Best effort |
+
+## Paid Support
+
+Teams that need guaranteed response times or help with deployment can purchase a support engagement. See [docs/pricing.md](docs/pricing.md) for available packages and [MONETIZATION.md](MONETIZATION.md) for the full strategy.
 
 ## Community Standards
 

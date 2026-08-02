@@ -5,6 +5,8 @@
 [![CI](https://github.com/kmkirk83/Telepilot/actions/workflows/ci.yml/badge.svg)](https://github.com/kmkirk83/Telepilot/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub Marketplace](https://img.shields.io/badge/GitHub%20Marketplace-Telepilot-blue?logo=github)](https://github.com/marketplace)
+[![GitHub Sponsors](https://img.shields.io/github/sponsors/kmkirk83?label=Sponsors&logo=githubsponsors)](https://github.com/sponsors/kmkirk83)
+[![Open Collective](https://img.shields.io/opencollective/all/telepilot?label=Open%20Collective&logo=opencollective)](https://opencollective.com/telepilot)
 
 ---
 
@@ -20,6 +22,7 @@
 - [Security & Secrets Handling](#security--secrets-handling)
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
+- [Sponsorship & Support](#sponsorship--support)
 - [Changelog](#changelog)
 - [Marketplace Publication Checklist](#marketplace-publication-checklist)
 - [License](#license)
@@ -217,6 +220,26 @@ See [`action.yml`](action.yml) for the full list of inputs and outputs.
 ## Contributing
 
 Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+
+---
+
+## Sponsorship & Support
+
+Telepilot is **free and open source** (MIT). The core connector will always be self-hostable at no cost.
+
+If Telepilot saves you time or helps your team, please consider:
+
+| Channel | Link |
+|---|---|
+| ⭐ GitHub Sponsors | [github.com/sponsors/kmkirk83](https://github.com/sponsors/kmkirk83) |
+| 💛 Open Collective | [opencollective.com/telepilot](https://opencollective.com/telepilot) |
+| 🤝 Paid support / consulting | See [SUPPORT.md](SUPPORT.md) |
+
+Sponsorships go directly toward maintenance, infrastructure, and future development.
+
+For teams that want professional help deploying Telepilot securely, or a future **managed hosted version** (no servers required), see the [monetization strategy](MONETIZATION.md) and [pricing tiers](docs/pricing.md) documents for the full roadmap.
+
+> **Hosted and enterprise tiers are not yet available.** The documents describe the planned approach and what signals will trigger their development. Ship free first — let demand decide.
 
 ---
 
