@@ -1,0 +1,165 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Validate action.yml ────────────────────────────────────────────────────
+  validate-action:
+    name: Validate action.yml
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check action.yml is valid YAML
+        run: |
+          python3 -c "import yaml, sys; yaml.safe_load(open('action.yml'))"
+          echo "action.yml is valid YAML ✅"
+
+      - name: Verify required action fields
+        run: |
+          python3 - <<'EOF'
+          import yaml, sys
+
+          with open("action.yml") as f:
+              action = yaml.safe_load(f)
+
+          required = ["name", "description", "runs"]
+          missing = [k for k in required if k not in action]
+          if missing:
+              print(f"action.yml is missing required fields: {missing}", file=sys.stderr)
+              sys.exit(1)
+
+          branding = action.get("branding", {})
+          if not branding.get("icon") or not branding.get("color"):
+              print("action.yml branding.icon and branding.color are required for Marketplace", file=sys.stderr)
+              sys.exit(1)
+
+          print("action.yml structure is valid ✅")
+          EOF
+
+  # ── Validate environment variable documentation ────────────────────────────
+  validate-env-docs:
+    name: Validate .env.example
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: .env.example exists and is non-empty
+        run: |
+          if [ ! -s ".env.example" ]; then
+            echo ".env.example is missing or empty" >&2
+            exit 1
+          fi
+          echo ".env.example is present ✅"
+
+  # ── Lint docs / markdown ───────────────────────────────────────────────────
+  lint-docs:
+    name: Lint Markdown docs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install markdownlint-cli
+        run: npm install -g markdownlint-cli@0.39.0
+
+      - name: Run markdownlint
+        run: |
+          markdownlint \
+            README.md \
+            SECURITY.md \
+            CONTRIBUTING.md \
+            CHANGELOG.md \
+            SUPPORT.md \
+            --config .markdownlint.json \
+            || true   # Non-blocking until rules are tuned
+
+  # ── Shell script static analysis ──────────────────────────────────────────
+  shellcheck:
+    name: ShellCheck (action.yml inline scripts)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract and check shell scripts from action.yml
+        run: |
+          python3 - <<'EOF'
+          import yaml, subprocess, tempfile, sys, os
+
+          with open("action.yml") as f:
+              action = yaml.safe_load(f)
+
+          steps = action.get("runs", {}).get("steps", [])
+          exit_code = 0
+          for i, step in enumerate(steps):
+              script = step.get("run", "")
+              if script:
+                  with tempfile.NamedTemporaryFile(mode="w", suffix=".sh", delete=False) as tmp:
+                      tmp.write("#!/usr/bin/env bash\n" + script)
+                      tmp_path = tmp.name
+                  result = subprocess.run(
+                      ["shellcheck", "--severity=warning", tmp_path],
+                      capture_output=True, text=True
+                  )
+                  if result.returncode != 0:
+                      print(f"ShellCheck issues in step {i} ({step.get('name', '?')}):")
+                      print(result.stdout)
+                      exit_code = 1
+                  os.unlink(tmp_path)
+
+          if exit_code == 0:
+              print("ShellCheck passed ✅")
+          sys.exit(exit_code)
+          EOF
+
+  # ── Secret scanning ────────────────────────────────────────────────────────
+  secret-scan:
+    name: Secret scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan for secrets with gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Release tagging ────────────────────────────────────────────────────────
+  update-major-tag:
+    name: Update major version tag (vN)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    if: github.event_name == 'release' && github.event.action == 'published'
+    needs: [validate-action, validate-env-docs, shellcheck, secret-scan]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Update major version tag
+        run: |
+          TAG="${GITHUB_REF_NAME}"          # e.g. v1.2.3
+          MAJOR="${TAG%%.*}"                # e.g. v1
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -fa "${MAJOR}" -m "Update ${MAJOR} tag to ${TAG}"
+          git push origin "${MAJOR}" --force

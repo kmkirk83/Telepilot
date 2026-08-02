@@ -1,0 +1,113 @@
+name: "Telepilot"
+description: "Forward a prompt to GitHub Copilot and optionally post the response to a Telegram chat."
+author: "kmkirk83"
+
+branding:
+  icon: "message-circle"
+  color: "blue"
+
+inputs:
+  prompt:
+    description: "The natural-language prompt to send to GitHub Copilot."
+    required: true
+  github-token:
+    description: >
+      GitHub token with Copilot or GitHub Models access.
+      Use secrets.GITHUB_TOKEN for basic access, or a PAT / App token for Copilot API.
+    required: true
+  copilot-endpoint:
+    description: "Override the GitHub Copilot API endpoint."
+    required: false
+    default: "https://api.githubcopilot.com"
+  model:
+    description: "Copilot / GitHub Models model to use (e.g. gpt-4o, claude-3.5-sonnet)."
+    required: false
+    default: "gpt-4o"
+  telegram-bot-token:
+    description: "Telegram bot token from @BotFather. If provided, the response is posted to Telegram."
+    required: false
+  telegram-chat-id:
+    description: "Telegram chat ID to post the Copilot response to."
+    required: false
+  context:
+    description: >
+      Optional additional context to prepend to the prompt
+      (e.g. a code snippet, diff, or file contents).
+    required: false
+    default: ""
+  fail-on-error:
+    description: "Set to 'true' to fail the workflow step if the Copilot API returns an error."
+    required: false
+    default: "false"
+
+outputs:
+  response:
+    description: "The full text response returned by GitHub Copilot."
+  telegram-message-id:
+    description: "The Telegram message ID of the posted response (only set when telegram-bot-token is provided)."
+
+runs:
+  using: "composite"
+  steps:
+    - name: Send prompt to Copilot
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        COPILOT_ENDPOINT: ${{ inputs.copilot-endpoint }}
+        MODEL: ${{ inputs.model }}
+        PROMPT: ${{ inputs.prompt }}
+        CONTEXT: ${{ inputs.context }}
+        FAIL_ON_ERROR: ${{ inputs.fail-on-error }}
+        TELEGRAM_BOT_TOKEN: ${{ inputs.telegram-bot-token }}
+        TELEGRAM_CHAT_ID: ${{ inputs.telegram-chat-id }}
+      run: |
+        set -euo pipefail
+
+        FULL_PROMPT="${CONTEXT:+$CONTEXT
+
+}${PROMPT}"
+
+        RESPONSE=$(curl -sf \
+          -H "Authorization: ******" \
+          -H "Content-Type: application/json" \
+          -H "Copilot-Integration-Id: telepilot-action" \
+          "${COPILOT_ENDPOINT}/chat/completions" \
+          -d "$(jq -n \
+            --arg model "${MODEL}" \
+            --arg content "${FULL_PROMPT}" \
+            '{model: $model, messages: [{role: "user", content: $content}]}')" \
+        ) || {
+          echo "::error::Copilot API request failed."
+          if [ "${FAIL_ON_ERROR}" = "true" ]; then exit 1; fi
+          exit 0
+        }
+
+        REPLY=$(echo "${RESPONSE}" | jq -r '.choices[0].message.content // empty')
+
+        if [ -z "${REPLY}" ]; then
+          echo "::warning::Copilot returned an empty response."
+          REPLY="(no response)"
+        fi
+
+        # Export output
+        echo "response<<EOF" >> "${GITHUB_OUTPUT}"
+        echo "${REPLY}" >> "${GITHUB_OUTPUT}"
+        echo "EOF" >> "${GITHUB_OUTPUT}"
+
+        echo "::notice::Copilot response captured (${#REPLY} chars)."
+
+        # Post to Telegram if credentials provided
+        if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
+          TG_RESPONSE=$(curl -sf \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d "$(jq -n \
+              --argjson chat_id "${TELEGRAM_CHAT_ID}" \
+              --arg text "${REPLY}" \
+              '{chat_id: $chat_id, text: $text, parse_mode: "Markdown"}')" \
+          ) || echo "::warning::Failed to post response to Telegram."
+
+          MSG_ID=$(echo "${TG_RESPONSE}" | jq -r '.result.message_id // empty')
+          if [ -n "${MSG_ID}" ]; then
+            echo "telegram-message-id=${MSG_ID}" >> "${GITHUB_OUTPUT}"
+          fi
+        fi
