@@ -29,11 +29,13 @@ Please be respectful and constructive in all interactions. We follow the [Contri
 ### Submitting Pull Requests
 
 1. **Fork** the repository and create a branch from `main`:
+
    ```bash
    git checkout -b feat/your-feature-name
    ```
 
 2. **Install dependencies** and confirm tests pass before making changes:
+
    ```bash
    npm install
    npm test
@@ -44,13 +46,15 @@ Please be respectful and constructive in all interactions. We follow the [Contri
 4. **Write or update tests** to cover your changes.
 
 5. **Run the full test suite**:
+
    ```bash
    npm test
    npm run lint
    ```
 
 6. **Commit** using [Conventional Commits](https://www.conventionalcommits.org/):
-   ```
+
+   ```text
    feat: add support for inline code snippets in responses
    fix: handle Telegram API timeout gracefully
    docs: update webhook setup instructions

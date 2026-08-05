@@ -25,18 +25,22 @@ npm run build
 ## Common incidents
 
 ### Invalid webhook secret
+
 - Symptom: `401 AUTHENTICATION_FAILED`
 - Action: verify `TELEGRAM_WEBHOOK_SECRET` and Telegram webhook configuration
 
 ### Tenant auth failures
+
 - Symptom: `401 AUTHENTICATION_FAILED` on `/v1/messages`
 - Action: rotate and redistribute the tenant API key in `API_KEYS`
 
 ### Dead-letter growth
+
 - Symptom: readiness endpoint reports increasing `deadLetterCount`
 - Action: verify provider credentials, inspect correlation IDs in logs, replay after remediation
 
 ### Rate limiting
+
 - Symptom: `429 RATE_LIMIT_EXCEEDED`
 - Action: raise `RATE_LIMIT_MAX_REQUESTS` or increase horizontal capacity after replacing in-memory limiter/state
 

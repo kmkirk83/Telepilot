@@ -16,6 +16,7 @@ If you discover a security vulnerability in Telepilot, please report it responsi
 2. **GitHub Security Advisories**: Use the [Report a Vulnerability](../../security/advisories/new) button in the GitHub Security tab.
 
 Please include:
+
 - A description of the vulnerability and its potential impact.
 - Steps to reproduce the issue.
 - Any proof-of-concept code (if applicable).
