@@ -8,7 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
-### Added
+### Added (Initial scaffold)
 
 - Production-grade `README.md` with full setup, deployment, and troubleshooting documentation.
 - `LICENSE` (MIT).
