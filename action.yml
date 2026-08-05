@@ -97,9 +97,11 @@ runs:
             exit 0
           }
         else
-          FULL_PROMPT="${CONTEXT:+$CONTEXT
-
-}${PROMPT}"
+          if [ -n "${CONTEXT}" ]; then
+            FULL_PROMPT=$(printf '%s\n\n%s' "${CONTEXT}" "${PROMPT}")
+          else
+            FULL_PROMPT="${PROMPT}"
+          fi
 
           RESPONSE=$(curl -sf \
             -H "Authorization: ******" \
@@ -130,12 +132,11 @@ runs:
 
         echo "::notice::Copilot response captured (${#REPLY} chars)."
 
-        # Post to Telegram if credentials provided
         if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
           TG_RESPONSE=$(curl -sf \
             "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d "$(jq -n \
-              --argjson chat_id "${TELEGRAM_CHAT_ID}" \
+              --arg chat_id "${TELEGRAM_CHAT_ID}" \
               --arg text "${REPLY}" \
               '{chat_id: $chat_id, text: $text, parse_mode: "Markdown"}')" \
           ) || echo "::warning::Failed to post response to Telegram."
