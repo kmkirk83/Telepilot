@@ -16,7 +16,6 @@ permissions:
   contents: read
 
 jobs:
-  # ── Validate action.yml ────────────────────────────────────────────────────
   validate-action:
     name: Validate action.yml
     runs-on: ubuntu-latest
@@ -24,34 +23,64 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
       - name: Check action.yml is valid YAML
         run: |
-          python3 -c "import yaml, sys; yaml.safe_load(open('action.yml'))"
-          echo "action.yml is valid YAML ✅"
+          python3 -c "import yaml, sys; yaml.safe_load(open('action.yml')); print('action.yml is valid YAML ✅')"
 
       - name: Verify required action fields
         run: |
-          python3 - <<'EOF'
+          python3 - <<'EOF_PY'
           import yaml, sys
-
-          with open("action.yml") as f:
+          with open('action.yml') as f:
               action = yaml.safe_load(f)
-
-          required = ["name", "description", "runs"]
+          required = ['name', 'description', 'runs']
           missing = [k for k in required if k not in action]
           if missing:
-              print(f"action.yml is missing required fields: {missing}", file=sys.stderr)
+              print(f'action.yml is missing required fields: {missing}', file=sys.stderr)
               sys.exit(1)
-
-          branding = action.get("branding", {})
-          if not branding.get("icon") or not branding.get("color"):
-              print("action.yml branding.icon and branding.color are required for Marketplace", file=sys.stderr)
+          branding = action.get('branding', {})
+          if not branding.get('icon') or not branding.get('color'):
+              print('action.yml branding.icon and branding.color are required for Marketplace', file=sys.stderr)
               sys.exit(1)
+          print('action.yml structure is valid ✅')
+          EOF_PY
 
-          print("action.yml structure is valid ✅")
-          EOF
+  node-quality:
+    name: Install, lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-  # ── Validate environment variable documentation ────────────────────────────
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit and integration tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
   validate-env-docs:
     name: Validate .env.example
     runs-on: ubuntu-latest
@@ -67,7 +96,6 @@ jobs:
           fi
           echo ".env.example is present ✅"
 
-  # ── Lint docs / markdown ───────────────────────────────────────────────────
   lint-docs:
     name: Lint Markdown docs
     runs-on: ubuntu-latest
@@ -80,16 +108,8 @@ jobs:
 
       - name: Run markdownlint
         run: |
-          markdownlint \
-            README.md \
-            SECURITY.md \
-            CONTRIBUTING.md \
-            CHANGELOG.md \
-            SUPPORT.md \
-            --config .markdownlint.json \
-            || true   # Non-blocking until rules are tuned
+          markdownlint README.md SECURITY.md CONTRIBUTING.md CHANGELOG.md SUPPORT.md docs/*.md --config .markdownlint.json
 
-  # ── Shell script static analysis ──────────────────────────────────────────
   shellcheck:
     name: ShellCheck (action.yml inline scripts)
     runs-on: ubuntu-latest
@@ -97,38 +117,34 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install ShellCheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck python3-yaml
+
       - name: Extract and check shell scripts from action.yml
         run: |
-          python3 - <<'EOF'
+          python3 - <<'EOF_PY'
           import yaml, subprocess, tempfile, sys, os
-
-          with open("action.yml") as f:
+          with open('action.yml') as f:
               action = yaml.safe_load(f)
-
-          steps = action.get("runs", {}).get("steps", [])
+          steps = action.get('runs', {}).get('steps', [])
           exit_code = 0
           for i, step in enumerate(steps):
-              script = step.get("run", "")
+              script = step.get('run', '')
               if script:
-                  with tempfile.NamedTemporaryFile(mode="w", suffix=".sh", delete=False) as tmp:
-                      tmp.write("#!/usr/bin/env bash\n" + script)
+                  with tempfile.NamedTemporaryFile(mode='w', suffix='.sh', delete=False) as tmp:
+                      tmp.write('#!/usr/bin/env bash\n' + script)
                       tmp_path = tmp.name
-                  result = subprocess.run(
-                      ["shellcheck", "--severity=warning", tmp_path],
-                      capture_output=True, text=True
-                  )
+                  result = subprocess.run(['shellcheck', '--severity=warning', tmp_path], capture_output=True, text=True)
                   if result.returncode != 0:
                       print(f"ShellCheck issues in step {i} ({step.get('name', '?')}):")
                       print(result.stdout)
                       exit_code = 1
                   os.unlink(tmp_path)
-
           if exit_code == 0:
-              print("ShellCheck passed ✅")
+              print('ShellCheck passed ✅')
           sys.exit(exit_code)
-          EOF
+          EOF_PY
 
-  # ── Secret scanning ────────────────────────────────────────────────────────
   secret-scan:
     name: Secret scanning
     runs-on: ubuntu-latest
@@ -143,23 +159,22 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # ── Release tagging ────────────────────────────────────────────────────────
   update-major-tag:
     name: Update major version tag (vN)
     runs-on: ubuntu-latest
     permissions:
       contents: write
     if: github.event_name == 'release' && github.event.action == 'published'
-    needs: [validate-action, validate-env-docs, shellcheck, secret-scan]
+    needs: [validate-action, node-quality, validate-env-docs, lint-docs, shellcheck, secret-scan]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Update major version tag
         run: |
-          TAG="${GITHUB_REF_NAME}"          # e.g. v1.2.3
-          MAJOR="${TAG%%.*}"                # e.g. v1
-          git config user.name  "github-actions[bot]"
+          TAG="${GITHUB_REF_NAME}"
+          MAJOR="${TAG%%.*}"
+          git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -fa "${MAJOR}" -m "Update ${MAJOR} tag to ${TAG}"
           git push origin "${MAJOR}" --force
