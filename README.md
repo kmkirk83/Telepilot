@@ -19,6 +19,7 @@
 - [Local Development Setup](#local-development-setup)
 - [Docker / Deployment](#docker--deployment)
 - [GitHub Action Usage](#github-action-usage)
+- [Multi-Repository Orchestration](#multi-repository-orchestration)
 - [Security & Secrets Handling](#security--secrets-handling)
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
@@ -182,7 +183,49 @@ Telepilot ships a reusable GitHub Action that lets you query Copilot from any wo
     telegram-chat-id: ${{ secrets.TELEGRAM_CHAT_ID }}
 ```
 
+### Multi-repository example
+
+```yaml
+- name: Ask Copilot across repos
+  uses: kmkirk83/Telepilot@v1
+  with:
+    prompt: "Summarise release readiness"
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    repo-config: |
+      acme/api|api|main|Backend release status
+      acme/web|web|main|Frontend release status
+    target-repos: all
+```
+
+### Autocomplete example
+
+```yaml
+- name: Suggest repository aliases
+  id: suggest-repos
+  uses: kmkirk83/Telepilot@v1
+  with:
+    prompt: "unused when autocomplete is set"
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    repo-config: |
+      acme/api|api|main|Backend release status
+      acme/web|web|main|Frontend release status
+    repo-autocomplete-query: ap
+```
+
 See [`action.yml`](action.yml) for the full list of inputs and outputs.
+
+---
+
+## Multi-Repository Orchestration
+
+Use `repo-config` to register repositories in `owner/name|alias|branch|context` format. Separate entries with newlines or semicolons.
+
+- `target-repos: all` fans out a prompt across every configured repo.
+- `target-repos: api,web` limits execution to specific aliases.
+- `repo-autocomplete-query` returns the `autocomplete` output instead of sending a Copilot request.
+- Unknown aliases fail with suggestion text based on configured repositories.
+
+Current runtime behavior is scaffolded for orchestration and prompt construction so workflows can standardize multi-repo targeting before live per-repo API integration is added.
 
 ---
 

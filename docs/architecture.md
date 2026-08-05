@@ -68,6 +68,9 @@ Responsible for:
 When run as a GitHub Action (`action.yml`):
 
 - The `prompt` and optional `context` inputs are passed directly to the Copilot Adapter.
+- `repo-config` can register multiple repositories with aliases, default branches, and per-repo context.
+- `target-repos` selects a subset of configured aliases, or `all` to fan out across every repo.
+- `repo-autocomplete-query` returns repository suggestions through the `autocomplete` output.
 - The response is written to `$GITHUB_OUTPUT` as the `response` output variable.
 - If `telegram-bot-token` and `telegram-chat-id` are provided, the response is additionally posted to Telegram.
 
@@ -124,6 +127,7 @@ Environment variables → `.env` file (loaded at startup) → default values har
 
 ## Future Considerations
 
+- **Live per-repo Copilot dispatch** — replace the current orchestration scaffold with authenticated per-repo completion requests.
 - **Conversation history** — maintain per-chat message history for multi-turn conversations.
 - **GitHub App authentication** — exchange App credentials for installation tokens automatically.
 - **Plugin system** — allow custom handlers for Telegram commands (e.g. `/review`, `/summarise`).

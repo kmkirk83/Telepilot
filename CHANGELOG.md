@@ -10,6 +10,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- Multi-repository orchestration scaffold with repository config parsing, alias selection, and autocomplete support.
+- Node.js runtime entrypoint and tests for orchestration fan-out behavior.
 - Production-grade `README.md` with full setup, deployment, and troubleshooting documentation.
 - `LICENSE` (MIT).
 - `SECURITY.md` with vulnerability reporting policy and GitHub App permission matrix.
@@ -31,6 +33,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- Multi-repository orchestration scaffold with repository config parsing, alias selection, and autocomplete support.
+- Node.js runtime entrypoint and tests for orchestration fan-out behavior.
 - Initial `README.md` describing Telepilot as a Telegram connector for GitHub Copilot.
 
 ---
