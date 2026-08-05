@@ -65,7 +65,7 @@ runs:
 
         FULL_PROMPT="${CONTEXT:+$CONTEXT
 
-}${PROMPT}"
+        }${PROMPT}"
 
         RESPONSE=$(curl -sf \
           -H "Authorization: ******" \
