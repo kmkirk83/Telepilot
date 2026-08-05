@@ -35,6 +35,20 @@ inputs:
       (e.g. a code snippet, diff, or file contents).
     required: false
     default: ""
+  repo-config:
+    description: >
+      Multi-repository configuration entries in owner/name|alias|branch|context format,
+      separated by newlines or semicolons.
+    required: false
+    default: ""
+  target-repos:
+    description: "Comma-separated repo aliases to target, or 'all' to fan out across every configured repo."
+    required: false
+    default: "all"
+  repo-autocomplete-query:
+    description: "Optional query used to return matching repository aliases instead of sending a Copilot request."
+    required: false
+    default: ""
   fail-on-error:
     description: "Set to 'true' to fail the workflow step if the Copilot API returns an error."
     required: false
@@ -43,6 +57,8 @@ inputs:
 outputs:
   response:
     description: "The full text response returned by GitHub Copilot."
+  autocomplete:
+    description: "JSON array of repository autocomplete matches when repo-autocomplete-query is set."
   telegram-message-id:
     description: "The Telegram message ID of the posted response (only set when telegram-bot-token is provided)."
 
@@ -57,42 +73,60 @@ runs:
         MODEL: ${{ inputs.model }}
         PROMPT: ${{ inputs.prompt }}
         CONTEXT: ${{ inputs.context }}
+        REPO_CONFIG: ${{ inputs.repo-config }}
+        TARGET_REPOS: ${{ inputs.target-repos }}
+        REPO_AUTOCOMPLETE_QUERY: ${{ inputs.repo-autocomplete-query }}
         FAIL_ON_ERROR: ${{ inputs.fail-on-error }}
         TELEGRAM_BOT_TOKEN: ${{ inputs.telegram-bot-token }}
         TELEGRAM_CHAT_ID: ${{ inputs.telegram-chat-id }}
       run: |
         set -euo pipefail
 
-        FULL_PROMPT="${CONTEXT:+$CONTEXT
+        export PROMPT CONTEXT REPO_CONFIG TARGET_REPOS REPO_AUTOCOMPLETE_QUERY GITHUB_OUTPUT
+
+        if [ -n "${REPO_CONFIG}" ] || [ -n "${REPO_AUTOCOMPLETE_QUERY}" ]; then
+          if ! command -v node >/dev/null 2>&1; then
+            echo "::error::Node.js is required for multi-repository orchestration."
+            if [ "${FAIL_ON_ERROR}" = "true" ]; then exit 1; fi
+            exit 0
+          fi
+
+          REPLY=$(node "${GITHUB_ACTION_PATH}/src/main.js") || {
+            echo "::error::Multi-repository orchestration failed."
+            if [ "${FAIL_ON_ERROR}" = "true" ]; then exit 1; fi
+            exit 0
+          }
+        else
+          FULL_PROMPT="${CONTEXT:+$CONTEXT
 
 }${PROMPT}"
 
-        RESPONSE=$(curl -sf \
-          -H "Authorization: ******" \
-          -H "Content-Type: application/json" \
-          -H "Copilot-Integration-Id: telepilot-action" \
-          "${COPILOT_ENDPOINT}/chat/completions" \
-          -d "$(jq -n \
-            --arg model "${MODEL}" \
-            --arg content "${FULL_PROMPT}" \
-            '{model: $model, messages: [{role: "user", content: $content}]}')" \
-        ) || {
-          echo "::error::Copilot API request failed."
-          if [ "${FAIL_ON_ERROR}" = "true" ]; then exit 1; fi
-          exit 0
-        }
+          RESPONSE=$(curl -sf \
+            -H "Authorization: ******" \
+            -H "Content-Type: application/json" \
+            -H "Copilot-Integration-Id: telepilot-action" \
+            "${COPILOT_ENDPOINT}/chat/completions" \
+            -d "$(jq -n \
+              --arg model "${MODEL}" \
+              --arg content "${FULL_PROMPT}" \
+              '{model: $model, messages: [{role: "user", content: $content}]}')" \
+          ) || {
+            echo "::error::Copilot API request failed."
+            if [ "${FAIL_ON_ERROR}" = "true" ]; then exit 1; fi
+            exit 0
+          }
 
-        REPLY=$(echo "${RESPONSE}" | jq -r '.choices[0].message.content // empty')
+          REPLY=$(echo "${RESPONSE}" | jq -r '.choices[0].message.content // empty')
 
-        if [ -z "${REPLY}" ]; then
-          echo "::warning::Copilot returned an empty response."
-          REPLY="(no response)"
+          if [ -z "${REPLY}" ]; then
+            echo "::warning::Copilot returned an empty response."
+            REPLY="(no response)"
+          fi
+
+          echo "response<<EOF" >> "${GITHUB_OUTPUT}"
+          echo "${REPLY}" >> "${GITHUB_OUTPUT}"
+          echo "EOF" >> "${GITHUB_OUTPUT}"
         fi
-
-        # Export output
-        echo "response<<EOF" >> "${GITHUB_OUTPUT}"
-        echo "${REPLY}" >> "${GITHUB_OUTPUT}"
-        echo "EOF" >> "${GITHUB_OUTPUT}"
 
         echo "::notice::Copilot response captured (${#REPLY} chars)."
 
