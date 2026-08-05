@@ -5,14 +5,15 @@ export class NormalizationService {
   fromTelegram(payload: TelegramWebhookPayload, tenant: TenantConfig, correlationId: string): CanonicalMessage {
     const text = payload.message?.text?.trim();
     const sessionId = payload.message?.chat?.id;
+    const updateId = payload.update_id;
     const messageId = payload.message?.message_id;
 
-    if (!text || !sessionId || !messageId) {
+    if (!text || !sessionId || updateId == null || messageId == null) {
       throw new ValidationError('Telegram payload missing required fields');
     }
 
     return {
-      id: `telegram-${messageId}`,
+      id: `telegram-${tenant.id}-${String(sessionId)}-${String(messageId)}`,
       tenantId: tenant.id,
       sessionId: String(sessionId),
       text,
@@ -20,7 +21,7 @@ export class NormalizationService {
       correlationId,
       senderId: payload.message?.from?.id ? String(payload.message.from.id) : undefined,
       metadata: {
-        updateId: payload.update_id
+        updateId
       }
     };
   }

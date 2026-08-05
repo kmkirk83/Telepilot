@@ -19,11 +19,19 @@ export class SessionStore {
       outputText: result?.outputText
     });
     current.updatedAt = new Date().toISOString();
-    this.sessions.set(current.id, current);
+    this.sessions.set(this.keyFor(current.tenantId, current.id), current);
     return current;
   }
 
-  get(sessionId: string) {
-    return this.sessions.get(sessionId);
+  get(sessionId: string, tenantId?: string) {
+    if (tenantId) {
+      return this.sessions.get(this.keyFor(tenantId, sessionId));
+    }
+
+    return [...this.sessions.values()].find((session) => session.id === sessionId);
+  }
+
+  private keyFor(tenantId: string, sessionId: string) {
+    return `${tenantId}:${sessionId}`;
   }
 }

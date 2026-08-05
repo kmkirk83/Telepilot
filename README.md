@@ -8,7 +8,7 @@ Telepilot exposes a versioned Connector API that accepts Telegram webhook events
 
 ### Public endpoints
 
-- `POST /v1/webhook/telegram`
+- `POST /v1/webhook/telegram/:tenantId`
 - `POST /v1/messages`
 - `GET /v1/sessions/:id`
 - `GET /health/live`
@@ -57,11 +57,11 @@ See `.env.example` for the complete list. Core variables:
 ### Telegram webhook
 
 ```bash
-curl -X POST http://localhost:3000/v1/webhook/telegram \
+curl -X POST http://localhost:3000/v1/webhook/telegram/tenant-default \
   -H 'content-type: application/json' \
   -H 'x-telegram-bot-api-secret-token: change-me' \
   -d '{
-    "tenantId": "tenant-default",
+    "update_id": 1001,
     "message": {
       "message_id": 42,
       "text": "hello from telegram",
@@ -93,7 +93,7 @@ curl http://localhost:3000/v1/sessions/tenant-default-session-1 \
 
 ## Webhook setup
 
-Configure your Telegram bot webhook to point to `/v1/webhook/telegram` and provide the same secret token as `TELEGRAM_WEBHOOK_SECRET`. Telegram does not sign payload bodies with an HMAC; Telepilot therefore validates the Bot API secret-token header and documents this assumption for review readiness.
+Configure your Telegram bot webhook to point to `/v1/webhook/telegram/:tenantId` for the intended tenant and provide the same secret token as `TELEGRAM_WEBHOOK_SECRET`. In production, Telepilot rejects startup if the webhook secret is unset. Telegram does not sign payload bodies with an HMAC; Telepilot therefore validates the Bot API secret-token header for the tenant-bound route.
 
 ## Deployment notes
 
@@ -107,7 +107,7 @@ Configure your Telegram bot webhook to point to `/v1/webhook/telegram` and provi
 - `GET /health/live`: process liveness
 - `GET /health/ready`: queue and dead-letter readiness snapshot
 - Inspect structured JSON logs using correlation IDs from responses.
-- Dead-letter growth indicates unrecoverable dispatch failures and should trigger replay or tenant credential checks.
+- Dead-letter growth indicates unrecoverable dispatch failures and should trigger credential checks and remediation of the underlying provider error.
 
 ## Troubleshooting
 
@@ -118,7 +118,7 @@ Configure your Telegram bot webhook to point to `/v1/webhook/telegram` and provi
 
 ## Security and privacy notes
 
-- No credentials are hardcoded; all secrets are env-driven.
+- Production startup rejects the development placeholder API key and empty webhook secret.
 - Validate and rotate tenant/provider secrets regularly.
 - Minimize retained message content and add persistence encryption before marketplace launch with external tenants.
 - Review `SECURITY.md` for reporting guidance and operational expectations.

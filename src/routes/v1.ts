@@ -15,7 +15,7 @@ export function buildV1Router(
   const router = Router();
   const authenticatedLimiter = createRateLimiter(60_000, 120);
 
-  router.post('/webhook/telegram', (req, res, next) => {
+  router.post('/webhook/telegram/:tenantId', (req, res, next) => {
     try {
       webhookController.ingest(req, res);
     } catch (error) {

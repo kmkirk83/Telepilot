@@ -19,9 +19,9 @@ describe('Telepilot connector API', () => {
   it('accepts telegram webhook and fast-acks', async () => {
     const app = makeApp();
     const response = await request(app)
-      .post('/v1/webhook/telegram')
+      .post('/v1/webhook/telegram/tenant-default')
       .set('x-telegram-bot-api-secret-token', 'secret')
-      .send({ tenantId: 'tenant-default', message: { message_id: 10, text: 'hello', chat: { id: 55 }, from: { id: 7 } } });
+      .send({ update_id: 1001, message: { message_id: 10, text: 'hello', chat: { id: 55 }, from: { id: 7 } } });
 
     expect(response.status).toBe(202);
     expect(response.body.data).toEqual({ accepted: true, duplicate: false });
@@ -48,19 +48,35 @@ describe('Telepilot connector API', () => {
 
   it('enforces idempotency for duplicate webhook updates', async () => {
     const app = makeApp();
-    const payload = { tenantId: 'tenant-default', message: { message_id: 10, text: 'hello', chat: { id: 55 }, from: { id: 7 } } };
+    const payload = { update_id: 1001, message: { message_id: 10, text: 'hello', chat: { id: 55 }, from: { id: 7 } } };
 
     const first = await request(app)
-      .post('/v1/webhook/telegram')
+      .post('/v1/webhook/telegram/tenant-default')
       .set('x-telegram-bot-api-secret-token', 'secret')
       .send(payload);
     const second = await request(app)
-      .post('/v1/webhook/telegram')
+      .post('/v1/webhook/telegram/tenant-default')
       .set('x-telegram-bot-api-secret-token', 'secret')
       .send(payload);
 
     expect(first.body.data.duplicate).toBe(false);
     expect(second.body.data.duplicate).toBe(true);
+  });
+
+  it('treats equal telegram message ids from different chats as distinct', async () => {
+    const app = makeApp();
+
+    const first = await request(app)
+      .post('/v1/webhook/telegram/tenant-default')
+      .set('x-telegram-bot-api-secret-token', 'secret')
+      .send({ update_id: 2001, message: { message_id: 10, text: 'hello', chat: { id: 55 }, from: { id: 7 } } });
+    const second = await request(app)
+      .post('/v1/webhook/telegram/tenant-default')
+      .set('x-telegram-bot-api-secret-token', 'secret')
+      .send({ update_id: 2002, message: { message_id: 10, text: 'hello again', chat: { id: 56 }, from: { id: 7 } } });
+
+    expect(first.body.data.duplicate).toBe(false);
+    expect(second.body.data.duplicate).toBe(false);
   });
 
   it('routes API messages based on tenant provider', async () => {

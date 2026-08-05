@@ -37,7 +37,7 @@ npm run build
 ### Dead-letter growth
 
 - Symptom: readiness endpoint reports increasing `deadLetterCount`
-- Action: verify provider credentials, inspect correlation IDs in logs, replay after remediation
+- Action: verify provider credentials, inspect correlation IDs in logs, and remediate the underlying failure before accepting new traffic
 
 ### Rate limiting
 

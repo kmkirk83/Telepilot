@@ -58,6 +58,8 @@ export function createApp(env: AppEnv) {
   app.use(express.json({ limit: '100kb' }));
   app.use(correlationMiddleware);
   app.use(createHttpLogger(logger));
+  app.get('/health/live', (req, res) => healthController.live(req, res));
+  app.get('/health/ready', (req, res) => healthController.ready(req, res));
   app.use(createRateLimiter(env.RATE_LIMIT_WINDOW_MS, env.RATE_LIMIT_MAX_REQUESTS));
   app.use((req, res, next) => {
     const span = tracer.startSpan('http.request', { path: req.path });
@@ -66,8 +68,6 @@ export function createApp(env: AppEnv) {
     next();
   });
 
-  app.get('/health/live', (req, res) => healthController.live(req, res));
-  app.get('/health/ready', (req, res) => healthController.ready(req, res));
   app.get('/openapi.json', (_req, res) => res.json(openApiSpec));
   app.use('/v1', buildV1Router(authService, webhookController, messageController, sessionController));
   app.use(errorHandler);

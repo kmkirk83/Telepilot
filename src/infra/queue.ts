@@ -1,4 +1,5 @@
 import type { QueueJob } from '../types/domain.js';
+import { ValidationError } from './errors.js';
 
 export interface QueueHandler<T> {
   (job: QueueJob<T>): Promise<void>;
@@ -53,7 +54,11 @@ export class InMemoryQueue<T> {
       try {
         await handler(job);
         return;
-      } catch {
+      } catch (error) {
+        if (error instanceof ValidationError) {
+          this.deadLetter.push(job);
+          return;
+        }
         if (job.attempts >= this.maxRetries) {
           this.deadLetter.push(job);
           return;
@@ -61,6 +66,9 @@ export class InMemoryQueue<T> {
         const nextAttempt = { ...job, attempts: job.attempts + 1 };
         await new Promise((resolve) => setTimeout(resolve, this.backoffMs * nextAttempt.attempts));
         this.jobs.push(nextAttempt);
+        queueMicrotask(() => {
+          void this.processNext();
+        });
         return;
       }
     }

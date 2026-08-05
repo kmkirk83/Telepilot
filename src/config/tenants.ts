@@ -1,16 +1,23 @@
 import type { AppEnv } from './env.js';
 import type { ProviderKind, TenantConfig } from '../types/domain.js';
 
+const providerKinds: ProviderKind[] = ['copilot', 'openai', 'mcp'];
+
 function parseMap(value: string): Record<string, string> {
   return value
     .split(',')
     .map((entry) => entry.trim())
     .filter(Boolean)
     .reduce<Record<string, string>>((acc, entry) => {
-      const [key, rawValue] = entry.split(':');
-      if (key && rawValue) {
-        acc[key] = rawValue;
+      const parts = entry.split(':');
+      if (parts.length !== 2) {
+        throw new Error(`Invalid mapping entry: ${entry}`);
       }
+      const [key, rawValue] = parts;
+      if (!key || !rawValue) {
+        throw new Error(`Invalid mapping entry: ${entry}`);
+      }
+      acc[key] = rawValue;
       return acc;
     }, {});
 }
@@ -21,7 +28,11 @@ export function buildTenants(env: AppEnv): Map<string, TenantConfig> {
   const tenants = new Map<string, TenantConfig>();
 
   for (const [tenantId, apiKey] of Object.entries(apiKeys)) {
-    const provider = (providers[tenantId] ?? 'copilot') as ProviderKind;
+    const providerValue = providers[tenantId] ?? 'copilot';
+    if (!providerKinds.includes(providerValue as ProviderKind)) {
+      throw new Error(`Unsupported provider for tenant ${tenantId}: ${providerValue}`);
+    }
+    const provider = providerValue as ProviderKind;
     tenants.set(tenantId, {
       id: tenantId,
       name: tenantId,

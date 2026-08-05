@@ -15,11 +15,12 @@ export class WebhookService {
   }
 
   accept(message: CanonicalMessage, tenant: TenantConfig) {
-    if (this.idempotency.has(message.id)) {
+    const idempotencyKey = `${tenant.id}:${message.source}:${message.source === 'telegram' ? String(message.metadata?.updateId ?? message.id) : message.id}`;
+    if (this.idempotency.has(idempotencyKey)) {
       return { accepted: true, duplicate: true };
     }
 
-    this.idempotency.add(message.id);
+    this.idempotency.add(idempotencyKey);
     this.queue.enqueue({
       id: message.id,
       attempts: 0,

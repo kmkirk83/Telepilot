@@ -11,8 +11,9 @@ export class SessionController {
     if (!sessionId) {
       throw new NotFoundError('Session id is required');
     }
-    const session = this.sessions.get(sessionId);
-    if (!session) {
+    const tenantId = req.app.locals.authTenant?.id as string | undefined;
+    const session = tenantId ? this.sessions.get(sessionId, tenantId) : this.sessions.get(sessionId);
+    if (!session || (tenantId && session.tenantId !== tenantId)) {
       throw new NotFoundError(`Session not found: ${sessionId}`);
     }
     res.json({ data: session });

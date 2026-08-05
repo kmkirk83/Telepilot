@@ -23,5 +23,17 @@ const envSchema = z.object({
 export type AppEnv = z.infer<typeof envSchema>;
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
-  return envSchema.parse(source);
+  const env = envSchema.parse(source);
+
+  if (env.NODE_ENV === 'production') {
+    if (!env.API_KEYS || env.API_KEYS === 'tenant-default:dev-api-key') {
+      throw new Error('API_KEYS must be explicitly configured in production');
+    }
+
+    if (!env.TELEGRAM_WEBHOOK_SECRET) {
+      throw new Error('TELEGRAM_WEBHOOK_SECRET must be configured in production');
+    }
+  }
+
+  return env;
 }

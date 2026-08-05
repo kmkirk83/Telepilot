@@ -13,15 +13,16 @@ export class WebhookController {
   ) {}
 
   ingest(req: Request, res: Response) {
-    const secret = req.header('x-telegram-bot-api-secret-token') ?? '';
-    if (this.webhookSecret && secret !== this.webhookSecret) {
-      throw new AuthenticationError('Invalid Telegram webhook secret');
-    }
-
-    const tenantId = String(req.body?.tenantId ?? 'tenant-default');
-    const tenant = this.tenants.get(tenantId);
+    const tenantId = Array.isArray(req.params.tenantId) ? req.params.tenantId[0] : req.params.tenantId;
+    const tenant = tenantId ? this.tenants.get(tenantId) : undefined;
     if (!tenant) {
       throw new AuthenticationError('Unknown tenant');
+    }
+
+    const secret = req.header('x-telegram-bot-api-secret-token') ?? '';
+    const expectedSecret = tenant.telegram?.webhookSecret ?? this.webhookSecret;
+    if (!expectedSecret || secret !== expectedSecret) {
+      throw new AuthenticationError('Invalid Telegram webhook secret');
     }
 
     const correlationId = req.header('x-correlation-id') ?? crypto.randomUUID();

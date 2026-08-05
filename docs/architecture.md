@@ -2,8 +2,8 @@
 
 ## Connector flow
 
-1. Telegram sends an update to `POST /v1/webhook/telegram`.
-2. Telepilot validates the Telegram secret-token header.
+1. Telegram sends an update to `POST /v1/webhook/telegram/:tenantId`.
+2. Telepilot resolves the tenant from the trusted route binding and validates that tenant's Telegram secret-token header.
 3. The webhook is normalized into a canonical internal message.
 4. The service performs idempotency checks and enqueues async work.
 5. The router dispatches to the tenant-selected provider adapter (`copilot`, `openai`, or `mcp`).
@@ -31,8 +31,9 @@
 
 - Tenants are configured from env-driven maps (`API_KEYS`, `TENANT_PROVIDERS`)
 - API access is scoped via tenant API keys
+- Production startup rejects placeholder API keys and empty webhook secrets
 - OAuth scaffolding is modeled on the tenant configuration for future install flows
 
 ## Security assumptions
 
-Telegram webhook validation uses the Bot API secret-token header because Telegram does not provide a universal request-body signature for this webhook mode. External tenant deployments should terminate TLS at the edge and manage secrets through environment injection or a dedicated secret manager.
+Telegram webhook validation uses the Bot API secret-token header because Telegram does not provide a universal request-body signature for this webhook mode. Production startup fails closed if the webhook secret is unset or API keys are left on the development placeholder. External tenant deployments should terminate TLS at the edge and manage secrets through environment injection or a dedicated secret manager.

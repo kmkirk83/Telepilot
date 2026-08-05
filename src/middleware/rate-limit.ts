@@ -3,10 +3,21 @@ import { RateLimitError } from '../infra/errors.js';
 
 export function createRateLimiter(windowMs: number, maxRequests: number) {
   const hits = new Map<string, { count: number; resetAt: number }>();
+  let lastCleanupAt = 0;
 
   return (req: Request, _res: Response, next: NextFunction) => {
     const key = req.ip || 'unknown';
     const now = Date.now();
+
+    if (now - lastCleanupAt >= windowMs) {
+      for (const [clientKey, hit] of hits.entries()) {
+        if (hit.resetAt <= now) {
+          hits.delete(clientKey);
+        }
+      }
+      lastCleanupAt = now;
+    }
+
     const existing = hits.get(key);
 
     if (!existing || existing.resetAt <= now) {
