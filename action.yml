@@ -1,5 +1,5 @@
 name: "Telepilot"
-description: "Forward a prompt to GitHub Copilot and optionally post the response to a Telegram chat."
+description: "Run a bounded AI prompt in GitHub Actions, optionally relay the response to an authorized Telegram chat, and emit an optional signed Clarion event summary."
 author: "kmkirk83"
 
 branding:
@@ -8,106 +8,90 @@ branding:
 
 inputs:
   prompt:
-    description: "The natural-language prompt to send to GitHub Copilot."
+    description: "Plain-text prompt to send to the configured provider (maximum 12,000 characters after optional context is combined)."
     required: true
-  github-token:
-    description: >
-      GitHub token with Copilot or GitHub Models access.
-      Use secrets.GITHUB_TOKEN for basic access, or a PAT / App token for Copilot API.
-    required: true
-  copilot-endpoint:
-    description: "Override the GitHub Copilot API endpoint."
+  provider:
+    description: "Provider adapter identifier. v0 supports only 'openai'."
     required: false
-    default: "https://api.githubcopilot.com"
+    default: "openai"
+  api-key:
+    description: "Provider credential. Pass only from GitHub Actions secrets."
+    required: true
+  api-endpoint:
+    description: "OpenAI-compatible chat-completions endpoint."
+    required: false
+    default: "https://api.openai.com/v1/chat/completions"
   model:
-    description: "Copilot / GitHub Models model to use (e.g. gpt-4o, claude-3.5-sonnet)."
+    description: "Provider model identifier."
     required: false
-    default: "gpt-4o"
-  telegram-bot-token:
-    description: "Telegram bot token from @BotFather. If provided, the response is posted to Telegram."
-    required: false
-  telegram-chat-id:
-    description: "Telegram chat ID to post the Copilot response to."
-    required: false
+    default: "gpt-4o-mini"
   context:
-    description: >
-      Optional additional context to prepend to the prompt
-      (e.g. a code snippet, diff, or file contents).
+    description: "Optional caller-supplied text context (maximum 24,000 characters)."
     required: false
     default: ""
-  fail-on-error:
-    description: "Set to 'true' to fail the workflow step if the Copilot API returns an error."
+  telegram-bot-token:
+    description: "Optional Telegram Bot API token. Telegram delivery is disabled unless this and telegram-chat-id are both set."
+    required: false
+  telegram-chat-id:
+    description: "Optional Telegram chat ID for delivery."
+    required: false
+  telegram-allowed-chat-ids:
+    description: "Optional comma-separated allowlist of Telegram chat IDs. When set, telegram-chat-id must be included."
+    required: false
+    default: ""
+  clarion-event-endpoint:
+    description: "Optional Clarion endpoint that receives a signed, metadata-only completion summary."
+    required: false
+  clarion-event-secret:
+    description: "Optional HMAC secret for the Clarion event summary. Pass only from GitHub Actions secrets."
+    required: false
+  clarion-organization-id:
+    description: "Clarion organization ID that owns the optional event summary."
+    required: false
+  clarion-event-required:
+    description: "Fail the action when an enabled Clarion event summary cannot be delivered."
     required: false
     default: "false"
+  fail-on-error:
+    description: "Fail the action on provider or authorized-delivery errors. Defaults to true."
+    required: false
+    default: "true"
+  action-version:
+    description: "Version label included in optional Clarion event summaries."
+    required: false
+    default: "v0.1.0"
 
 outputs:
   response:
-    description: "The full text response returned by GitHub Copilot."
+    description: "Normalized provider response text."
+  provider:
+    description: "Provider adapter that generated the response."
+  request-id:
+    description: "Non-secret correlation ID for troubleshooting."
   telegram-message-id:
-    description: "The Telegram message ID of the posted response (only set when telegram-bot-token is provided)."
+    description: "Telegram message ID when optional delivery succeeds."
+  clarion-event-status:
+    description: "One of disabled, delivered, or failed."
 
 runs:
   using: "composite"
   steps:
-    - name: Send prompt to Copilot
+    - name: Run Telepilot
       shell: bash
       env:
-        GITHUB_TOKEN: ${{ inputs.github-token }}
-        COPILOT_ENDPOINT: ${{ inputs.copilot-endpoint }}
-        MODEL: ${{ inputs.model }}
         PROMPT: ${{ inputs.prompt }}
+        PROVIDER: ${{ inputs.provider }}
+        API_KEY: ${{ inputs.api-key }}
+        API_ENDPOINT: ${{ inputs.api-endpoint }}
+        MODEL: ${{ inputs.model }}
         CONTEXT: ${{ inputs.context }}
-        FAIL_ON_ERROR: ${{ inputs.fail-on-error }}
         TELEGRAM_BOT_TOKEN: ${{ inputs.telegram-bot-token }}
         TELEGRAM_CHAT_ID: ${{ inputs.telegram-chat-id }}
-      run: |
-        set -euo pipefail
-
-        FULL_PROMPT="${CONTEXT:+$CONTEXT
-
-}${PROMPT}"
-
-        RESPONSE=$(curl -sf \
-          -H "Authorization: ******" \
-          -H "Content-Type: application/json" \
-          -H "Copilot-Integration-Id: telepilot-action" \
-          "${COPILOT_ENDPOINT}/chat/completions" \
-          -d "$(jq -n \
-            --arg model "${MODEL}" \
-            --arg content "${FULL_PROMPT}" \
-            '{model: $model, messages: [{role: "user", content: $content}]}')" \
-        ) || {
-          echo "::error::Copilot API request failed."
-          if [ "${FAIL_ON_ERROR}" = "true" ]; then exit 1; fi
-          exit 0
-        }
-
-        REPLY=$(echo "${RESPONSE}" | jq -r '.choices[0].message.content // empty')
-
-        if [ -z "${REPLY}" ]; then
-          echo "::warning::Copilot returned an empty response."
-          REPLY="(no response)"
-        fi
-
-        # Export output
-        echo "response<<EOF" >> "${GITHUB_OUTPUT}"
-        echo "${REPLY}" >> "${GITHUB_OUTPUT}"
-        echo "EOF" >> "${GITHUB_OUTPUT}"
-
-        echo "::notice::Copilot response captured (${#REPLY} chars)."
-
-        # Post to Telegram if credentials provided
-        if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
-          TG_RESPONSE=$(curl -sf \
-            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-            -d "$(jq -n \
-              --argjson chat_id "${TELEGRAM_CHAT_ID}" \
-              --arg text "${REPLY}" \
-              '{chat_id: $chat_id, text: $text, parse_mode: "Markdown"}')" \
-          ) || echo "::warning::Failed to post response to Telegram."
-
-          MSG_ID=$(echo "${TG_RESPONSE}" | jq -r '.result.message_id // empty')
-          if [ -n "${MSG_ID}" ]; then
-            echo "telegram-message-id=${MSG_ID}" >> "${GITHUB_OUTPUT}"
-          fi
-        fi
+        TELEGRAM_ALLOWED_CHAT_IDS: ${{ inputs.telegram-allowed-chat-ids }}
+        CLARION_EVENT_ENDPOINT: ${{ inputs.clarion-event-endpoint }}
+        CLARION_EVENT_SECRET: ${{ inputs.clarion-event-secret }}
+        CLARION_ORGANIZATION_ID: ${{ inputs.clarion-organization-id }}
+        CLARION_EVENT_REQUIRED: ${{ inputs.clarion-event-required }}
+        FAIL_ON_ERROR: ${{ inputs.fail-on-error }}
+        ACTION_VERSION: ${{ inputs.action-version }}
+      run: "${{ github.action_path }}/scripts/run-action.sh"

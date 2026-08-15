@@ -24,6 +24,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install YAML parser
+        run: python3 -m pip install --user pyyaml
+
       - name: Check action.yml is valid YAML
         run: |
           python3 -c "import yaml, sys; yaml.safe_load(open('action.yml'))"
@@ -128,6 +131,20 @@ jobs:
           sys.exit(exit_code)
           EOF
 
+  # ── Action runtime checks ──────────────────────────────────────────────────
+  action-runtime:
+    name: Validate action runtime
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: ShellCheck action runtime and contract tests
+        run: shellcheck --severity=warning scripts/run-action.sh tests/run-action.test.sh
+
+      - name: Run deterministic action contract tests
+        run: bash tests/run-action.test.sh
+
   # ── Secret scanning ────────────────────────────────────────────────────────
   secret-scan:
     name: Secret scanning
@@ -150,7 +167,7 @@ jobs:
     permissions:
       contents: write
     if: github.event_name == 'release' && github.event.action == 'published'
-    needs: [validate-action, validate-env-docs, shellcheck, secret-scan]
+    needs: [validate-action, validate-env-docs, shellcheck, action-runtime, secret-scan]
     steps:
       - name: Checkout
         uses: actions/checkout@v4

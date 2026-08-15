@@ -1,130 +1,54 @@
-# Telepilot — Architecture Overview
+# Telepilot v0 Architecture
 
-This document describes the internal design of Telepilot in more detail than the README provides.
+## Scope
 
----
+Telepilot v0 is a **composite GitHub Action**, not a hosted service. It runs inside the caller’s GitHub Actions job, processes only caller-supplied text, and has no inbound webhook, queue, database, durable memory, repository crawler, or remote-execution capability.
 
-## High-Level Diagram
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                         Telegram Network                         │
-│                                                                  │
-│   User ──▶ Telegram Servers ──▶ Telepilot Webhook/Polling        │
-│                        ◀── Telegram sendMessage ◀──              │
-└──────────────────────────────────────────────────────────────────┘
-                                   │
-                    ┌──────────────▼──────────────┐
-                    │        Telepilot Core        │
-                    │                              │
-                    │  ┌─────────────────────┐     │
-                    │  │  Message Router     │     │
-                    │  │  - Auth check       │     │
-                    │  │  - Rate limiting    │     │
-                    │  │  - Context builder  │     │
-                    │  └────────┬────────────┘     │
-                    │           │                  │
-                    │  ┌────────▼────────────┐     │
-                    │  │  Copilot Adapter    │     │
-                    │  │  - Token auth       │     │
-                    │  │  - Prompt format    │     │
-                    │  │  - Retry / backoff  │     │
-                    │  └────────┬────────────┘     │
-                    │           │                  │
-                    └───────────┼──────────────────┘
-                                │
-                    ┌───────────▼──────────────────┐
-                    │     GitHub Copilot API /      │
-                    │     GitHub Models Endpoint    │
-                    └──────────────────────────────┘
+```text
+GitHub Actions workflow
+        │
+        ├── explicit prompt + optional text context
+        │
+        ▼
+Telepilot composite action
+        │
+        ├── OpenAI-compatible chat-completions request
+        │        │
+        │        ▼
+        │    normalized text response ──► GITHUB_OUTPUT
+        │        │
+        │        ├── optional authorized Telegram relay
+        │        │
+        │        └── optional signed metadata-only Clarion event
+        │
+        ▼
+workflow-controlled next step
 ```
 
----
+## Runtime Components
 
-## Component Descriptions
+| Component | Responsibility | Trust boundary |
+|---|---|---|
+| `action.yml` | Declares inputs, outputs, and the environment passed to the composite action. | It maps GitHub Actions expressions into process environment variables; secrets must originate from Actions secrets. |
+| `scripts/run-action.sh` | Validates inputs, invokes the provider, writes approved outputs, performs optional delivery, and signs optional event summaries. | It never prints credentials or raw authorization headers. |
+| Provider adapter | Sends one OpenAI-compatible chat-completions request for each action invocation. | It receives only the caller’s prompt and optional context. |
+| Telegram relay | Sends a plain-text response to one configured, optional chat. | It requires both token and chat ID and honors an optional chat allowlist. |
+| Clarion event sink | Records completion metadata for operational traceability. | Telepilot signs the payload with HMAC. The connection is outbound-only. |
 
-### Message Router
+## Input Controls
 
-Responsible for:
+The action validates a 12,000-character prompt limit and a 24,000-character context limit before calling the provider. The provider identifier is allowlisted to `openai` in v0. Any provider error, invalid configuration, missing credential, or unauthorized Telegram target follows the `fail-on-error` policy, which defaults to failing the workflow step.
 
-- Receiving raw Telegram updates (via webhook HTTP POST or long-polling).
-- Validating the webhook signature (`TELEGRAM_WEBHOOK_SECRET`).
-- Checking `ALLOWED_TELEGRAM_USERS` access control.
-- Extracting the user's message text and building the Copilot prompt.
-- Dispatching the prompt to the Copilot Adapter.
-- Sending the response back to Telegram via `sendMessage`.
+The action writes only the documented outputs. It does not expose credentials, raw headers, or structured provider payloads. The response is not automatically logged; workflow authors decide how to consume or display it.
 
-### Copilot Adapter
+## Telegram Boundary
 
-Responsible for:
+Telegram is a delivery channel, not an inbound command channel. The action does not register a webhook, poll Telegram, or accept messages from Telegram users. When configured, it sends a maximum-length plain-text response to a single declared chat. If an allowlist is supplied, the declared target must match it exactly.
 
-- Authenticating with the GitHub Copilot API or GitHub Models endpoint using `GITHUB_TOKEN`.
-- Formatting the request payload (`POST /chat/completions`).
-- Handling transient API errors with exponential back-off and retries.
-- Returning the text of the first `choices[0].message.content`.
+## Clarion Boundary
 
-### GitHub Action Mode
+The optional Clarion event payload is HMAC-signed and contains the action version, request ID, provider identifier, outcome, duration, response digest, and an optional sanitized failure summary. It intentionally excludes prompt text, response text, source code, credentials, and user identifiers. Clarion may record the event as `TELEPILOT_EVENT`; it cannot command Telepilot through this integration.
 
-When run as a GitHub Action (`action.yml`):
+## Operational Model
 
-- The `prompt` and optional `context` inputs are passed directly to the Copilot Adapter.
-- The response is written to `$GITHUB_OUTPUT` as the `response` output variable.
-- If `telegram-bot-token` and `telegram-chat-id` are provided, the response is additionally posted to Telegram.
-
----
-
-## API Endpoints
-
-### Telegram Webhook
-
-```
-POST /telegram/webhook
-Headers:
-  X-Telegram-Bot-Api-Secret-Token: <TELEGRAM_WEBHOOK_SECRET>
-Body: Telegram Update object (JSON)
-```
-
-### Health Check
-
-```
-GET /health
-Response: { "status": "ok", "version": "1.0.0" }
-```
-
----
-
-## Data Flow — Service Mode
-
-```
-1. Telegram sends POST to /telegram/webhook
-2. Telepilot validates X-Telegram-Bot-Api-Secret-Token header
-3. Message text extracted from Update.message.text
-4. Sender's Telegram user ID checked against ALLOWED_TELEGRAM_USERS
-5. Prompt constructed: [optional context] + user message
-6. POST to GITHUB_COPILOT_ENDPOINT/chat/completions
-7. Response text extracted from choices[0].message.content
-8. POST to https://api.telegram.org/bot{TOKEN}/sendMessage
-```
-
----
-
-## Configuration Precedence
-
-Environment variables → `.env` file (loaded at startup) → default values hard-coded in source.
-
----
-
-## Scalability Notes
-
-- Telepilot is stateless; multiple replicas can run behind a load balancer.
-- Telegram webhook mode scales better than long-polling because each request is handled independently.
-- GitHub Copilot API rate limits are per-user; if many Telegram users share one `GITHUB_TOKEN`, rate limiting may apply.
-
----
-
-## Future Considerations
-
-- **Conversation history** — maintain per-chat message history for multi-turn conversations.
-- **GitHub App authentication** — exchange App credentials for installation tokens automatically.
-- **Plugin system** — allow custom handlers for Telegram commands (e.g. `/review`, `/summarise`).
-- **Metrics** — expose Prometheus metrics for request counts, latency, and error rates.
+Telepilot has no persistent infrastructure. It inherits GitHub Actions’ lifecycle, logging, and secret-management model. The repository’s CI performs action-metadata validation, ShellCheck, deterministic contract testing, Markdown linting, and secret scanning. A release should not be created until a private workflow verifies the chosen provider and any enabled optional delivery path with non-production credentials.
